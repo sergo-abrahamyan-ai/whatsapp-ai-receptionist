@@ -1,0 +1,382 @@
+{
+  "name": "WhatsApp Reminders & Review Requests",
+  "nodes": [
+    {
+      "id": "64e7ce34-da34-41a6-b273-ff4269a8b6da",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4897620c-9c02-4963-bdbc-042f070fcfc4",
+      "name": "Clinic Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "phoneNumberId",
+              "value": "YOUR_WHATSAPP_PHONE_NUMBER_ID",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "reviewLink",
+              "value": "https://g.page/r/YOUR-CLINIC/review",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7f83c74a-dafe-4a2d-ade2-05cd6924f3ae",
+      "name": "Find Visits in Next 24h",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BOOKINGS_TABLE_ID"
+        },
+        "filterByFormula": "AND({Status}='booked', IS_AFTER({Appointment At}, NOW()), IS_BEFORE({Appointment At}, DATEADD(NOW(), 24, 'hours')))",
+        "returnAll": true
+      }
+    },
+    {
+      "id": "fe4bb5e0-78b8-4ceb-9539-0fe5b332b388",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendTemplate",
+        "phoneNumberId": "={{ $(\"Clinic Settings\").first().json.phoneNumberId }}",
+        "recipientPhoneNumber": "={{ String($json.fields?.Phone || '').replace(/\\D/g, \"\") }}",
+        "template": "appointment_reminder_ru|ru",
+        "components": {
+          "component": [
+            {
+              "type": "body",
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "type": "text",
+                    "text": "={{ $json.fields?.Name || \"клиент\" }}"
+                  },
+                  {
+                    "type": "text",
+                    "text": "={{ $json.fields?.Service || \"приём\" }}"
+                  },
+                  {
+                    "type": "text",
+                    "text": "={{ DateTime.fromISO($json.fields?.[\"Appointment At\"]).setZone(\"Asia/Yerevan\").setLocale(\"ru\").toFormat(\"d MMMM 'в' HH:mm\") }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ff218f1d-3414-45a4-90fc-a761b28128f3",
+      "name": "Mark Reminded",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BOOKINGS_TABLE_ID"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $(\"Find Visits in Next 24h\").item.json.id }}",
+            "Status": "={{ $json.messages ? 'reminded' : 'reminder failed' }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      }
+    },
+    {
+      "id": "f99c0eab-dbc4-4250-9949-11fd9dfe6dcf",
+      "name": "Find Finished Visits",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BOOKINGS_TABLE_ID"
+        },
+        "filterByFormula": "AND(OR({Status}='booked', {Status}='reminded', {Status}='reminder failed', {Status}='visited'), IS_BEFORE({Appointment At}, DATEADD(NOW(), -2, 'hours')), IS_AFTER({Appointment At}, DATEADD(NOW(), -3, 'days')))",
+        "returnAll": true
+      }
+    },
+    {
+      "id": "1a70503a-8881-4085-8585-b5114082fb1f",
+      "name": "Send Review Request",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendTemplate",
+        "phoneNumberId": "={{ $(\"Clinic Settings\").first().json.phoneNumberId }}",
+        "recipientPhoneNumber": "={{ String($json.fields?.Phone || '').replace(/\\D/g, \"\") }}",
+        "template": "review_request_ru|ru",
+        "components": {
+          "component": [
+            {
+              "type": "body",
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "type": "text",
+                    "text": "={{ $json.fields?.Name || \"клиент\" }}"
+                  },
+                  {
+                    "type": "text",
+                    "text": "={{ $(\"Clinic Settings\").first().json.reviewLink }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "146464c0-9d2e-4237-bcd8-f87879a74df2",
+      "name": "Mark Review Requested",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BOOKINGS_TABLE_ID"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $(\"Find Finished Visits\").item.json.id }}",
+            "Status": "={{ $json.messages ? 'review requested' : 'review failed' }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Clinic Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinic Settings": {
+      "main": [
+        [
+          {
+            "node": "Find Visits in Next 24h",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Finished Visits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Visits in Next 24h": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reminder": {
+      "main": [
+        [
+          {
+            "node": "Mark Reminded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Finished Visits": {
+      "main": [
+        [
+          {
+            "node": "Send Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Review Request": {
+      "main": [
+        [
+          {
+            "node": "Mark Review Requested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
