@@ -91,7 +91,14 @@ workflow/
 ## Screenshots / video
 
 - 🎬 Demo video: [watch](https://czibuahmksmifbzapnkv.supabase.co/storage/v1/object/public/smm-images/videos/1-whatsapp-receptionist-hy.mp4)
-- n8n canvas screenshot: *coming soon*
+
+**Receptionist workflow**
+
+![Receptionist workflow](docs/1-whatsapp-receptionist.png)
+
+**Reminders & reviews workflow**
+
+![Reminders & reviews workflow](docs/2-reminders-and-reviews.png)
 
 ## What I learned
 
